@@ -10,7 +10,7 @@ public class UserRepository(AppDbContext context, ILogger<UserRepository> logger
     {
         if (logger.IsEnabled(LogLevel.Debug))
             logger.LogDebug("Fetching all users");
-        
+
         return await context.Users
             .Include(u => u.UserRoles)
             .ThenInclude(ur => ur.Role)
@@ -43,8 +43,10 @@ public class UserRepository(AppDbContext context, ILogger<UserRepository> logger
     {
         if (logger.IsEnabled(LogLevel.Debug))
             logger.LogDebug("Creating user {Username}", user.Username);
+
         context.Users.Add(user);
         await context.SaveChangesAsync(ct);
+
         return user;
     }
 

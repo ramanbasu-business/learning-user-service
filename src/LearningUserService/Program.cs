@@ -1,15 +1,42 @@
+using System.Text;
 using learning_user_service.Data;
 using learning_user_service.Infrastructure;
 using learning_user_service.Repositories;
 using learning_user_service.Services;
+
 using Microsoft.EntityFrameworkCore;
+
 using Scalar.AspNetCore;
 using Serilog;
+
+using Microsoft.AspNetCore.Authentication.JwtBearer; // JWT Bearer authentication
+using Microsoft.IdentityModel.Tokens; // JWT Bearer authentication
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddControllers();
+
+var jwtSecret = builder.Configuration["Jwt:Secret"]
+    ?? throw new InvalidOperationException("Jwt:Secret is not configured.");
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            RoleClaimType = "roles",
+            NameClaimType = "sub",
+        };
+    });
+
+builder.Services.AddAuthorization();
 
 // 1. Configure Serilog to write to Console and a daily rolling .txt file
 Log.Logger = new LoggerConfiguration()
@@ -54,7 +81,11 @@ app.UseExceptionHandler();
 app.UseHttpsRedirection();
 
 app.UseSerilogRequestLogging(); // This will log HTTP requests and responses, including status codes and execution times
-app.UseAuthorization();
+
+// ----- auth -----
+app.UseAuthentication(); // Authentication comes first
+app.UseAuthorization(); // Then authorization
+
 
 app.MapControllers();
 app.MapHealthChecks("/health");

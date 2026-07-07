@@ -1,12 +1,12 @@
 {
   "openapi": "3.1.1",
   "info": {
-    "title": "learning-core-api | v1",
+    "title": "LearningUserService | v1",
     "version": "1.0.0"
   },
   "servers": [
     {
-      "url": "http://localhost:5002/"
+      "url": "https://localhost:5002/"
     }
   ],
   "paths": {
@@ -687,6 +687,12 @@
               "null",
               "string"
             ]
+          },
+          "entraId": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -765,6 +771,11 @@
           "username",
           "email",
           "name",
+          "entraId",
+          "createdAt",
+          "updatedAt",
+          "isActive",
+          "lastLogin",
           "roles"
         ],
         "type": "object",
@@ -785,10 +796,34 @@
               "string"
             ]
           },
+          "entraId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "lastLogin": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
           "roles": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/RoleDto"
             }
           }
         }

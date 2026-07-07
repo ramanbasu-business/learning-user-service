@@ -9,14 +9,24 @@ namespace learning_user_service.Services;
 
 public class UserService : IUserService
 {
-    public UserService(IUserRepository userRepository, ILogger<UserService> logger)
+    public const string DefaultRoleName = "ReadOnly";
+
+    public UserService(
+        IUserRepository userRepository,
+        IRoleRepository roleRepository,
+        IRoleService roleService,
+        ILogger<UserService> logger)
     {
         this.logger = logger;
         this.userRepository = userRepository;
+        this.roleRepository = roleRepository;
+        this.roleService = roleService;
     }
 
     public const string NotFoundMetadataKey = "NotFound";
     private readonly IUserRepository userRepository;
+    private readonly IRoleRepository roleRepository;
+    private readonly IRoleService roleService;
     private readonly ILogger<UserService> logger;
 
 
@@ -29,7 +39,7 @@ public class UserService : IUserService
 
             var users = await userRepository.GetAllAsync(ct);
             var userDtos = users.Select(MapToDto).ToList();
-         
+
             return Result.Ok((IReadOnlyList<UserDto>)userDtos);
         }
         catch (Exception ex)
@@ -45,7 +55,7 @@ public class UserService : IUserService
         {
             if (logger.IsEnabled(LogLevel.Debug))
                 logger.LogDebug("Fetching user {UserId}", id);
-                
+
             var user = await userRepository.GetByIdAsync(id, ct);
             if (user is null)
             {
@@ -74,8 +84,10 @@ public class UserService : IUserService
                 Username = request.Username,
                 Email = request.Email,
                 PasswordHash = HashPassword(request.Password),
+                Name = request.Name,
                 CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
+                UpdatedAt = DateTime.UtcNow,
+                EntraId = request.EntraId
             };
 
             var createdUser = await userRepository.CreateAsync(user, ct);
@@ -136,9 +148,14 @@ public class UserService : IUserService
         new(
             user.Id,
             user.Username,
-            user.Email,
+            user.Email ?? string.Empty,
+            user.EntraId,
             user.Name,
-        user.UserRoles.Select(ur => ur.Role.Name).ToList());
+            user.CreatedAt,
+            user.UpdatedAt,
+            user.IsActive,
+            user.LastLogin,
+        user.UserRoles.Select(ur => new RoleDto(ur.Role.Id, ur.Role.Name)).ToList());
 
     private static string HashPassword(string password)
     {

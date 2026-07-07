@@ -1,16 +1,25 @@
 using learning_user_service.Models.DTOs;
+using learning_user_service.Repositories;
 using learning_user_service.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace learning_user_service.Controllers;
 
 [ApiController]
 [Route("api/users")]
-public class UsersController(IUserService userService, ILogger<UsersController> logger) : ControllerBase
+[Authorize]
+public class UsersController(
+    IUserService userService,
+    IRoleService roleService,
+    IRoleRepository roleRepository,
+    ILogger<UsersController> logger) : ControllerBase
 {
+    private const string DefaultRoleName = "readonly";
 
 
     [HttpGet]
+    [Authorize]
     [ProducesResponseType(typeof(IReadOnlyList<UserDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetUsers(CancellationToken ct)
@@ -54,6 +63,7 @@ public class UsersController(IUserService userService, ILogger<UsersController> 
     }
 
     [HttpPost("auth")]
+    [AllowAnonymous]
     [ProducesResponseType(typeof(UserDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -61,7 +71,7 @@ public class UsersController(IUserService userService, ILogger<UsersController> 
     {
         if (logger.IsEnabled(LogLevel.Information))
             logger.LogInformation(
-                "Received login request {@Request}",
+                "login request {@Request}",
                 new
                 {
                     request.Username,
@@ -87,6 +97,7 @@ public class UsersController(IUserService userService, ILogger<UsersController> 
     }
 
     [HttpPost]
+    [Authorize(Roles = "admin,manager")]
     [ProducesResponseType(typeof(UserDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -110,11 +121,49 @@ public class UsersController(IUserService userService, ILogger<UsersController> 
             if (logger.IsEnabled(LogLevel.Information))
                 logger.LogInformation("Created user {UserId} for {Username}", result.Value.Id, request.Username);
 
-            return CreatedAtAction(nameof(GetUserById), new { id = result.Value.Id }, result.Value);
+            var createdUser = result.Value;
+            createdUser = await AssignDefaultRoleToUser(createdUser, ct);
+
+            return CreatedAtAction(nameof(GetUserById), new { id = createdUser.Id }, createdUser);
         }
 
         return Problem(detail: string.Join("; ", result.Errors.Select(e => e.Message)), statusCode: StatusCodes.Status500InternalServerError);
     }
+
+    private async Task<UserDto> AssignDefaultRoleToUser(UserDto createdUser, CancellationToken ct)
+    {
+        var defaultRole = await roleRepository.GetByNameAsync(DefaultRoleName, ct);
+        if (defaultRole is null)
+        {
+            logger.LogWarning(
+                "Default role {RoleName} not found; skipping role assignment for user {UserId}",
+                DefaultRoleName, createdUser.Id);
+        }
+        else
+        {
+            var assignResult = await roleService.AssignRoleToUserAsync(
+                new AssignRoleRequest(createdUser.Id, defaultRole.Id),
+                ct
+            );
+
+            if (assignResult.IsSuccess)
+            {
+                var refetched = await userService.GetUserByIdAsync(createdUser.Id, ct);
+                if (refetched.IsSuccess)
+                {
+                    createdUser = refetched.Value;
+                }
+            }
+            else
+            {
+                logger.LogWarning(
+                    "Failed to assign default role {RoleName} to user {UserId}: {Errors}",
+                    DefaultRoleName, createdUser.Id, string.Join("; ", assignResult.Errors.Select(e => e.Message)));
+            }
+        }
+        return createdUser;
+    }
+
 
     [HttpGet("{id:guid}/roles")]
     [ProducesResponseType(typeof(IReadOnlyList<RoleDto>), StatusCodes.Status200OK)]
@@ -137,11 +186,14 @@ public class UsersController(IUserService userService, ILogger<UsersController> 
             return Problem(detail: string.Join("; ", result.Errors.Select(e => e.Message)), statusCode: StatusCodes.Status500InternalServerError);
         }
 
-        var roles = result.Value.Roles.Select(r => new RoleDto(Guid.Empty, r)).ToList();
-        return Ok((IReadOnlyList<RoleDto>)roles);
+        return Ok(result.Value.Roles);
     }
 
+
+
+
     [HttpDelete("{id:guid}")]
+    [Authorize(Roles = "admin")] /* only admin can delete users */
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
