@@ -3,6 +3,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace learning_user_service.Infrastructure;
 
+/// <summary>
+/// GlobalExceptionHandler is an implementation of IExceptionHandler that handles unhandled exceptions in the application.
+/// </summary>
+/// <param name="logger"></param>
 public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
